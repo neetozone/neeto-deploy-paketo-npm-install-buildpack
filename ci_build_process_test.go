@@ -202,9 +202,12 @@ func testCIBuildProcess(t *testing.T, context spec.G, it spec.S) {
 					"      stderr output",
 				))
 
-				path, err := os.Readlink(filepath.Join(workingDir, "node_modules"))
+				// node_modules stays in the working directory and is copied into the
+				// layer for caching, instead of being moved there and symlinked back.
+				info, err := os.Lstat(filepath.Join(workingDir, "node_modules"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(path).To(Equal(filepath.Join(modulesDir, "node_modules")))
+				Expect(info.IsDir()).To(BeTrue())
+				Expect(filepath.Join(modulesDir, "node_modules")).To(BeADirectory())
 			})
 		})
 
@@ -221,9 +224,12 @@ func testCIBuildProcess(t *testing.T, context spec.G, it spec.S) {
 					"      stderr output",
 				))
 
-				path, err := os.Readlink(filepath.Join(workingDir, "node_modules"))
+				// node_modules stays in the working directory and is copied into the
+				// layer for caching, instead of being moved there and symlinked back.
+				info, err := os.Lstat(filepath.Join(workingDir, "node_modules"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(path).To(Equal(filepath.Join(modulesDir, "node_modules")))
+				Expect(info.IsDir()).To(BeTrue())
+				Expect(filepath.Join(modulesDir, "node_modules")).To(BeADirectory())
 			})
 		})
 
@@ -235,21 +241,6 @@ func testCIBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				it.After(func() {
 					Expect(os.Chmod(workingDir, os.ModePerm)).To(Succeed())
-				})
-
-				it("returns an error", func() {
-					err := process.Run(modulesDir, cacheDir, workingDir, "", false)
-					Expect(err).To(MatchError(ContainSubstring("permission denied")))
-				})
-			})
-
-			context("when the node_modules directory cannot be moved to the layer", func() {
-				it.Before(func() {
-					Expect(os.Chmod(modulesDir, 0000)).To(Succeed())
-				})
-
-				it.After(func() {
-					Expect(os.Chmod(modulesDir, os.ModePerm)).To(Succeed())
 				})
 
 				it("returns an error", func() {

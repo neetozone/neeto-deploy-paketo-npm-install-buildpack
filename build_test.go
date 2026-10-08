@@ -160,8 +160,8 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			Expect(buildLayer.Path).To(Equal(filepath.Join(layersDir, "build-modules")))
 			Expect(buildLayer.SharedEnv).To(Equal(packit.Environment{}))
 			Expect(buildLayer.BuildEnv).To(Equal(packit.Environment{
-				"PATH.append":       filepath.Join(layersDir, "build-modules", "node_modules", ".bin"),
-				"PATH.prepend":      filepath.Join(layersDir, "build-modules", "node_modules", ".bin_local"),
+				"PATH.append":       filepath.Join(workingDir, "node_modules", ".bin"),
+				"PATH.prepend":      filepath.Join(workingDir, "node_modules", ".bin_local"),
 				"PATH.delim":        ":",
 				"NODE_ENV.override": "development",
 			}))
@@ -211,10 +211,10 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 						"Organization: Anchore, Inc",
 						"Tool: -"
 					],
-					"licenseListVersion": "3.25"
+					"licenseListVersion": "3.28"
 				},
 				"dataLicense": "CC0-1.0",
-				"documentNamespace": "https://paketo.io/unknown-source-type/unknown-9ecf240a-d971-5a3c-8e7b-6d3f3ea4d9c2",
+				"documentNamespace": "https://paketo.io/unknown-source-type/unknown-139eda9a-585c-5678-88d8-988131078801",
 				"name": "unknown",
 				"packages": [
 					{
@@ -256,8 +256,8 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 					"version": ""
 				},
 				"schema": {
-					"version": "16.0.34",
-					"url": "https://raw.githubusercontent.com/anchore/syft/main/schema/json/schema-16.0.34.json"
+					"version": "16.1.3",
+					"url": "https://raw.githubusercontent.com/anchore/syft/main/schema/json/schema-16.1.3.json"
 				}
 			}`))
 
@@ -283,11 +283,8 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			Expect(processWorkingDir).To(Equal(workingDir))
 			Expect(processNpmrcPath).To(Equal(""))
 
-			Expect(linker.LinkCall.Receives.Source).To(Equal(filepath.Join(workingDir, "node_modules")))
-			Expect(linker.LinkCall.Receives.Target).To(Equal(filepath.Join(layersDir, "build-modules", "node_modules")))
-
-			Expect(symlinkResolver.ResolveCall.Receives.LockfilePath).To(Equal(filepath.Join(workingDir, "package-lock.json")))
-			Expect(symlinkResolver.ResolveCall.Receives.LayerPath).To(Equal(filepath.Join(layersDir, "build-modules")))
+			Expect(linker.LinkCall.CallCount).To(Equal(0))
+			Expect(symlinkResolver.ResolveCall.CallCount).To(Equal(0))
 		})
 	})
 
@@ -315,7 +312,7 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(result.Layers)).To(Equal(2))
+			Expect(len(result.Layers)).To(Equal(1))
 
 			launchLayer := result.Layers[0]
 			Expect(launchLayer.Name).To(Equal("launch-modules"))
@@ -325,116 +322,17 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			Expect(launchLayer.LaunchEnv).To(Equal(packit.Environment{
 				"NPM_CONFIG_LOGLEVEL.default": "error",
 				"NODE_PROJECT_PATH.default":   workingDir,
-				"PATH.append":                 filepath.Join(layersDir, "launch-modules", "node_modules", ".bin"),
-				"PATH.prepend":                filepath.Join(layersDir, "launch-modules", "node_modules", ".bin_local"),
+				"PATH.append":                 filepath.Join(workingDir, "node_modules", ".bin"),
+				"PATH.prepend":                filepath.Join(workingDir, "node_modules", ".bin_local"),
 				"PATH.delim":                  ":",
 			}))
 			Expect(launchLayer.ProcessLaunchEnv).To(Equal(map[string]packit.Environment{}))
 			Expect(launchLayer.Build).To(BeFalse())
 			Expect(launchLayer.Launch).To(BeTrue())
 			Expect(launchLayer.Cache).To(BeFalse())
-			Expect(launchLayer.Metadata).To(Equal(
-				map[string]interface{}{
-					"cache_sha": "some-sha",
-				}))
-
-			Expect(launchLayer.SBOM.Formats()).To(HaveLen(3))
-
-			cdx := launchLayer.SBOM.Formats()[0]
-			spdx := launchLayer.SBOM.Formats()[1]
-			syft := launchLayer.SBOM.Formats()[2]
-
-			Expect(cdx.Extension).To(Equal("cdx.json"))
-			Expect(spdx.Extension).To(Equal("spdx.json"))
-			Expect(syft.Extension).To(Equal("syft.json"))
-
-			content, err := io.ReadAll(cdx.Content)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(MatchJSON(`{
-				"$schema": "http://cyclonedx.org/schema/bom-1.3.schema.json",
-				"bomFormat": "CycloneDX",
-				"metadata": {
-					"tools": [
-						{
-							"name": "",
-							"vendor": "anchore"
-						}
-					]
-				},
-				"specVersion": "1.3",
-				"version": 1
-			}`))
-
-			content, err = io.ReadAll(spdx.Content)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(MatchJSON(`{
-				"SPDXID": "SPDXRef-DOCUMENT",
-				"creationInfo": {
-					"created": "0001-01-01T00:00:00Z",
-					"creators": [
-						"Organization: Anchore, Inc",
-						"Tool: -"
-					],
-					"licenseListVersion": "3.25"
-				},
-				"dataLicense": "CC0-1.0",
-				"documentNamespace": "https://paketo.io/unknown-source-type/unknown-9ecf240a-d971-5a3c-8e7b-6d3f3ea4d9c2",
-				"name": "unknown",
-				"packages": [
-					{
-						"SPDXID": "SPDXRef-DocumentRoot-Unknown-",
-						"copyrightText": "NOASSERTION",
-						"downloadLocation": "NOASSERTION",
-						"filesAnalyzed": false,
-						"licenseConcluded": "NOASSERTION",
-						"licenseDeclared": "NOASSERTION",
-						"name": "",
-						"supplier": "NOASSERTION"
-					}
-				],
-				"relationships": [
-					{
-						"relatedSpdxElement": "SPDXRef-DocumentRoot-Unknown-",
-						"relationshipType": "DESCRIBES",
-						"spdxElementId": "SPDXRef-DOCUMENT"
-					}
-				],
-				"spdxVersion": "SPDX-2.2"
-			}`))
-
-			content, err = io.ReadAll(syft.Content)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(MatchJSON(`{
-				"artifacts": [],
-				"artifactRelationships": [],
-				"source": {
-					"id": "",
-					"name": "",
-					"version": "",
-					"type": "",
-					"metadata": null
-				},
-				"distro": {},
-				"descriptor": {
-					"name": "",
-					"version": ""
-				},
-				"schema": {
-					"version": "16.0.34",
-					"url": "https://raw.githubusercontent.com/anchore/syft/main/schema/json/schema-16.0.34.json"
-				}
-			}`))
-
-			cacheLayer := result.Layers[1]
-			Expect(cacheLayer.Name).To(Equal(npminstall.LayerNameCache))
-			Expect(cacheLayer.Path).To(Equal(filepath.Join(layersDir, npminstall.LayerNameCache)))
-			Expect(cacheLayer.SharedEnv).To(Equal(packit.Environment{}))
-			Expect(cacheLayer.BuildEnv).To(Equal(packit.Environment{}))
-			Expect(cacheLayer.LaunchEnv).To(Equal(packit.Environment{}))
-			Expect(cacheLayer.ProcessLaunchEnv).To(Equal(map[string]packit.Environment{}))
-			Expect(cacheLayer.Build).To(BeFalse())
-			Expect(cacheLayer.Launch).To(BeFalse())
-			Expect(cacheLayer.Cache).To(BeTrue())
+			Expect(launchLayer.Metadata).To(BeEmpty())
+			Expect(launchLayer.ExecD).To(BeEmpty())
+			Expect(launchLayer.SBOM).To(BeNil())
 
 			Expect(configurationManager.DeterminePathCall.Receives.Typ).To(Equal("npmrc"))
 			Expect(configurationManager.DeterminePathCall.Receives.PlatformDir).To(Equal("some-platform-path"))
@@ -442,50 +340,13 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 
 			Expect(buildManager.ResolveCall.Receives.WorkingDir).To(Equal(workingDir))
 
+			// node_modules is installed only in the build phase, so nothing
+			// runs for the launch layer.
+			Expect(buildProcess.RunCall.CallCount).To(Equal(0))
 			Expect(pruneProcess.RunCall.CallCount).To(Equal(0))
-
-			Expect(processLayerDir).To(Equal(filepath.Join(layersDir, "launch-modules")))
-			Expect(processCacheDir).To(Equal(filepath.Join(layersDir, npminstall.LayerNameCache)))
-			Expect(processWorkingDir).To(Equal(workingDir))
-			Expect(processNpmrcPath).To(Equal(""))
-
-			Expect(linker.LinkCall.Receives.Source).To(Equal(filepath.Join(workingDir, "node_modules")))
-			Expect(linker.LinkCall.Receives.Target).To(Equal(filepath.Join(layersDir, "launch-modules", "node_modules")))
-
-			Expect(symlinkResolver.ResolveCall.Receives.LockfilePath).To(Equal(filepath.Join(workingDir, "package-lock.json")))
-			Expect(symlinkResolver.ResolveCall.Receives.LayerPath).To(Equal(filepath.Join(layersDir, "launch-modules")))
-		})
-
-		it("symlinks node_modules/.cache to tmp/node_modules_cache in order to work for the run user", func() {
-			err := os.MkdirAll(filepath.Join(tempDir, "node_modules_cache", "temp-content"), os.ModePerm)
-			Expect(err).NotTo(HaveOccurred())
-			result, err := build(packit.BuildContext{
-				BuildpackInfo: packit.BuildpackInfo{
-					SBOMFormats: []string{"application/vnd.cyclonedx+json", "application/spdx+json", "application/vnd.syft+json"},
-				},
-				Platform: packit.Platform{
-					Path: "some-platform-path",
-				},
-				WorkingDir: workingDir,
-				Layers:     packit.Layers{Path: layersDir},
-				CNBPath:    cnbDir,
-				Plan: packit.BuildpackPlan{
-					Entries: []packit.BuildpackPlanEntry{
-						{Name: "node_modules"},
-					},
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(len(result.Layers)).To(Equal(2))
-
-			launchLayer := result.Layers[0]
-			Expect(launchLayer.Name).To(Equal("launch-modules"))
-			Expect(launchLayer.Path).To(Equal(filepath.Join(layersDir, "launch-modules")))
-
-			linkedTmpContent := filepath.Join(launchLayer.Path, "node_modules", ".cache", "temp-content")
-			_, err = os.Stat(linkedTmpContent)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(sbomGenerator.GenerateCall.CallCount).To(Equal(0))
+			Expect(linker.LinkCall.CallCount).To(Equal(0))
+			Expect(symlinkResolver.ResolveCall.CallCount).To(Equal(0))
 		})
 	})
 
@@ -524,8 +385,8 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			Expect(buildLayer.Path).To(Equal(filepath.Join(layersDir, "build-modules")))
 			Expect(buildLayer.SharedEnv).To(Equal(packit.Environment{}))
 			Expect(buildLayer.BuildEnv).To(Equal(packit.Environment{
-				"PATH.append":       filepath.Join(layersDir, "build-modules", "node_modules", ".bin"),
-				"PATH.prepend":      filepath.Join(layersDir, "build-modules", "node_modules", ".bin_local"),
+				"PATH.append":       filepath.Join(workingDir, "node_modules", ".bin"),
+				"PATH.prepend":      filepath.Join(workingDir, "node_modules", ".bin_local"),
 				"PATH.delim":        ":",
 				"NODE_ENV.override": "development",
 			}))
@@ -576,10 +437,10 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 						"Organization: Anchore, Inc",
 						"Tool: -"
 					],
-					"licenseListVersion": "3.25"
+					"licenseListVersion": "3.28"
 				},
 				"dataLicense": "CC0-1.0",
-				"documentNamespace": "https://paketo.io/unknown-source-type/unknown-9ecf240a-d971-5a3c-8e7b-6d3f3ea4d9c2",
+				"documentNamespace": "https://paketo.io/unknown-source-type/unknown-139eda9a-585c-5678-88d8-988131078801",
 				"name": "unknown",
 				"packages": [
 					{
@@ -621,8 +482,8 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 					"version": ""
 				},
 				"schema": {
-					"version": "16.0.34",
-					"url": "https://raw.githubusercontent.com/anchore/syft/main/schema/json/schema-16.0.34.json"
+					"version": "16.1.3",
+					"url": "https://raw.githubusercontent.com/anchore/syft/main/schema/json/schema-16.1.3.json"
 				}
 			}`))
 
@@ -634,108 +495,17 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			Expect(launchLayer.LaunchEnv).To(Equal(packit.Environment{
 				"NPM_CONFIG_LOGLEVEL.default": "error",
 				"NODE_PROJECT_PATH.default":   workingDir,
-				"PATH.append":                 filepath.Join(layersDir, "launch-modules", "node_modules", ".bin"),
-				"PATH.prepend":                filepath.Join(layersDir, "launch-modules", "node_modules", ".bin_local"),
+				"PATH.append":                 filepath.Join(workingDir, "node_modules", ".bin"),
+				"PATH.prepend":                filepath.Join(workingDir, "node_modules", ".bin_local"),
 				"PATH.delim":                  ":",
 			}))
 			Expect(launchLayer.ProcessLaunchEnv).To(Equal(map[string]packit.Environment{}))
 			Expect(launchLayer.Build).To(BeFalse())
 			Expect(launchLayer.Launch).To(BeTrue())
 			Expect(launchLayer.Cache).To(BeFalse())
-			Expect(launchLayer.Metadata).To(Equal(
-				map[string]interface{}{
-					"cache_sha": "some-sha",
-				}))
-			Expect(launchLayer.ExecD).To(Equal([]string{
-				filepath.Join(cnbDir, "bin", "setup-symlinks"),
-			}))
-
-			Expect(launchLayer.SBOM.Formats()).To(HaveLen(3))
-
-			cdx = launchLayer.SBOM.Formats()[0]
-			spdx = launchLayer.SBOM.Formats()[1]
-			syft = launchLayer.SBOM.Formats()[2]
-
-			Expect(cdx.Extension).To(Equal("cdx.json"))
-			Expect(spdx.Extension).To(Equal("spdx.json"))
-			Expect(syft.Extension).To(Equal("syft.json"))
-
-			content, err = io.ReadAll(cdx.Content)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(MatchJSON(`{
-				"$schema": "http://cyclonedx.org/schema/bom-1.3.schema.json",
-				"bomFormat": "CycloneDX",
-				"metadata": {
-					"tools": [
-						{
-							"name": "",
-							"vendor": "anchore"
-						}
-					]
-				},
-				"specVersion": "1.3",
-				"version": 1
-			}`))
-
-			content, err = io.ReadAll(spdx.Content)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(MatchJSON(`{
-				"SPDXID": "SPDXRef-DOCUMENT",
-				"creationInfo": {
-					"created": "0001-01-01T00:00:00Z",
-					"creators": [
-						"Organization: Anchore, Inc",
-						"Tool: -"
-					],
-					"licenseListVersion": "3.25"
-				},
-				"dataLicense": "CC0-1.0",
-				"documentNamespace": "https://paketo.io/unknown-source-type/unknown-9ecf240a-d971-5a3c-8e7b-6d3f3ea4d9c2",
-				"name": "unknown",
-				"packages": [
-					{
-						"SPDXID": "SPDXRef-DocumentRoot-Unknown-",
-						"copyrightText": "NOASSERTION",
-						"downloadLocation": "NOASSERTION",
-						"filesAnalyzed": false,
-						"licenseConcluded": "NOASSERTION",
-						"licenseDeclared": "NOASSERTION",
-						"name": "",
-						"supplier": "NOASSERTION"
-					}
-				],
-				"relationships": [
-					{
-						"relatedSpdxElement": "SPDXRef-DocumentRoot-Unknown-",
-						"relationshipType": "DESCRIBES",
-						"spdxElementId": "SPDXRef-DOCUMENT"
-					}
-				],
-				"spdxVersion": "SPDX-2.2"
-			}`))
-
-			content, err = io.ReadAll(syft.Content)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(MatchJSON(`{
-				"artifacts": [],
-				"artifactRelationships": [],
-				"source": {
-					"id": "",
-					"name": "",
-					"version": "",
-					"type": "",
-					"metadata": null
-				},
-				"distro": {},
-				"descriptor": {
-					"name": "",
-					"version": ""
-				},
-				"schema": {
-					"version": "16.0.34",
-					"url": "https://raw.githubusercontent.com/anchore/syft/main/schema/json/schema-16.0.34.json"
-				}
-			}`))
+			Expect(launchLayer.Metadata).To(BeEmpty())
+			Expect(launchLayer.ExecD).To(BeEmpty())
+			Expect(launchLayer.SBOM).To(BeNil())
 
 			cacheLayer := result.Layers[2]
 			Expect(cacheLayer.Name).To(Equal(npminstall.LayerNameCache))
@@ -748,55 +518,16 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			Expect(cacheLayer.Launch).To(BeFalse())
 			Expect(cacheLayer.Cache).To(BeTrue())
 
-			Expect(pruneProcess.RunCall.Receives.ModulesDir).To(Equal(launchLayer.Path))
-			Expect(pruneProcess.RunCall.Receives.CacheDir).To(Equal(cacheLayer.Path))
-			Expect(pruneProcess.RunCall.Receives.WorkingDir).To(Equal(workingDir))
-			Expect(pruneProcess.RunCall.Receives.NpmrcPath).To(Equal(""))
-
-			Expect(linker.LinkCall.Receives.Source).To(Equal(filepath.Join(workingDir, "node_modules")))
-			Expect(linker.LinkCall.Receives.Target).To(Equal(filepath.Join(buildLayer.Path, "node_modules")))
-
-			Expect(symlinkResolver.ResolveCall.Receives.LockfilePath).To(Equal(filepath.Join(workingDir, "package-lock.json")))
-			Expect(symlinkResolver.ResolveCall.Receives.LayerPath).To(Equal(filepath.Join(buildLayer.Path)))
-			//Resolve should only be called once targeting the build-modules layer
-			Expect(symlinkResolver.ResolveCall.CallCount).To(Equal(1))
-
-			//Copy should be called in place of Resolve to copy workspace files to the launch-modules layer
-			Expect(symlinkResolver.CopyCall.Receives.LockfilePath).To(Equal(filepath.Join(workingDir, "package-lock.json")))
-			Expect(symlinkResolver.CopyCall.Receives.SourceLayerPath).To(Equal(filepath.Join(buildLayer.Path)))
-			Expect(symlinkResolver.CopyCall.Receives.TargetLayerPath).To(Equal(filepath.Join(launchLayer.Path)))
-		})
-
-		it("symlinks node_modules/.cache to tmp/node_modules_cache in order to work for the run user", func() {
-			err := os.MkdirAll(filepath.Join(tempDir, "node_modules_cache", "temp-content"), os.ModePerm)
-			Expect(err).NotTo(HaveOccurred())
-			result, err := build(packit.BuildContext{
-				BuildpackInfo: packit.BuildpackInfo{
-					SBOMFormats: []string{"application/vnd.cyclonedx+json", "application/spdx+json", "application/vnd.syft+json"},
-				},
-				Platform: packit.Platform{
-					Path: "some-platform-path",
-				},
-				WorkingDir: workingDir,
-				Layers:     packit.Layers{Path: layersDir},
-				CNBPath:    cnbDir,
-				Plan: packit.BuildpackPlan{
-					Entries: []packit.BuildpackPlanEntry{
-						{Name: "node_modules"},
-					},
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(len(result.Layers)).To(Equal(3))
-
-			launchLayer := result.Layers[1]
-			Expect(launchLayer.Name).To(Equal("launch-modules"))
-			Expect(launchLayer.Path).To(Equal(filepath.Join(layersDir, "launch-modules")))
-
-			linkedTmpContent := filepath.Join(launchLayer.Path, "node_modules", ".cache", "temp-content")
-			_, err = os.Stat(linkedTmpContent)
-			Expect(err).NotTo(HaveOccurred())
+			// The build process runs once, for the build layer. The launch layer
+			// neither prunes nor links node_modules.
+			Expect(buildProcess.RunCall.CallCount).To(Equal(1))
+			Expect(processLayerDir).To(Equal(buildLayer.Path))
+			Expect(processCacheDir).To(Equal(cacheLayer.Path))
+			Expect(processWorkingDir).To(Equal(workingDir))
+			Expect(pruneProcess.RunCall.CallCount).To(Equal(0))
+			Expect(linker.LinkCall.CallCount).To(Equal(0))
+			Expect(symlinkResolver.ResolveCall.CallCount).To(Equal(0))
+			Expect(symlinkResolver.CopyCall.CallCount).To(Equal(0))
 		})
 
 	})
@@ -804,7 +535,7 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 	context("when one npmrc binding is detected", func() {
 		it.Before(func() {
 			configurationManager.DeterminePathCall.Returns.Path = "some-binding-path/.npmrc"
-			entryResolver.MergeLayerTypesCall.Returns.Launch = true
+			entryResolver.MergeLayerTypesCall.Returns.Build = true
 		})
 
 		it("passes the path to the .npmrc to the build process and env configuration", func() {
@@ -847,9 +578,7 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 
 			Expect(buildManager.ResolveCall.Receives.WorkingDir).To(Equal(workingDir))
 			Expect(buildProcess.RunCall.CallCount).To(Equal(0))
-
-			Expect(linker.LinkCall.Receives.Source).To(Equal(filepath.Join(workingDir, "node_modules")))
-			Expect(linker.LinkCall.Receives.Target).To(Equal(filepath.Join(layersDir, "launch-modules", "node_modules")))
+			Expect(linker.LinkCall.CallCount).To(Equal(0))
 		})
 
 		context("when BP_NODE_PROJECT_PATH is set", func() {
@@ -860,7 +589,7 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 			})
 
 			it("resolves and calls the build process", func() {
-				_, err := build(packit.BuildContext{
+				result, err := build(packit.BuildContext{
 					BuildpackInfo: packit.BuildpackInfo{
 						SBOMFormats: []string{"application/vnd.cyclonedx+json", "application/spdx+json", "application/vnd.syft+json"},
 					},
@@ -877,9 +606,12 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(buildManager.ResolveCall.Receives.WorkingDir).To(Equal(filepath.Join(workingDir, "some-dir")))
 
-				Expect(processLayerDir).To(Equal(filepath.Join(layersDir, "launch-modules")))
-				Expect(processCacheDir).To(Equal(filepath.Join(layersDir, npminstall.LayerNameCache)))
-				Expect(processWorkingDir).To(Equal(filepath.Join(workingDir, "some-dir")))
+				Expect(buildProcess.RunCall.CallCount).To(Equal(0))
+
+				launchLayer := result.Layers[0]
+				Expect(launchLayer.Name).To(Equal("launch-modules"))
+				Expect(launchLayer.LaunchEnv["NODE_PROJECT_PATH.default"]).To(Equal(filepath.Join(workingDir, "some-dir")))
+				Expect(launchLayer.LaunchEnv["PATH.append"]).To(Equal(filepath.Join(workingDir, "some-dir", "node_modules", ".bin")))
 			})
 		})
 
@@ -1164,46 +896,6 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 					Expect(err).To(MatchError(ContainSubstring("failed to parse bool")))
 				})
 			})
-
-			context("when the node_modules directory cannot be linked", func() {
-				it.Before(func() {
-					linker.LinkCall.Returns.Error = errors.New("failed to link node_modules")
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{
-								{Name: "node_modules"},
-							},
-						},
-					})
-					Expect(err).To(MatchError("failed to link node_modules"))
-				})
-			})
-
-			context("when the linked modules cannot be resolved", func() {
-				it.Before(func() {
-					symlinkResolver.ResolveCall.Returns.Error = errors.New("failed to resolve module symlinks")
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{
-								{Name: "node_modules"},
-							},
-						},
-					})
-					Expect(err).To(MatchError("failed to resolve module symlinks"))
-				})
-			})
 		})
 
 		context("during the launch installation process", func() {
@@ -1272,150 +964,6 @@ func testBuild(t *testing.T, context spec.G, it spec.S) {
 						},
 					})
 					Expect(err).To(MatchError(ContainSubstring("permission denied")))
-				})
-			})
-
-			context("when build is also set and the node_modules copy fails", func() {
-				it.Before(func() {
-					entryResolver.MergeLayerTypesCall.Returns.Build = true
-					buildProcess.RunCall.Stub = func(string, string, string, string, bool) error {
-						return nil
-					}
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{
-								{Name: "node_modules"},
-							},
-						},
-					})
-					Expect(err).To(MatchError(ContainSubstring("no such file or directory")))
-				})
-			})
-
-			context("when the build process provided fails", func() {
-				it.Before(func() {
-					buildProcess.RunCall.Stub = func(string, string, string, string, bool) error {
-						return errors.New("given build process failed")
-					}
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{
-								{Name: "node_modules"},
-							},
-						},
-					})
-					Expect(err).To(MatchError("given build process failed"))
-				})
-			})
-
-			context("when the build process provided fails", func() {
-				context("when build is also set", func() {
-					it.Before(func() {
-						entryResolver.MergeLayerTypesCall.Returns.Build = true
-						pruneProcess.RunCall.Returns.Error = errors.New("prune process failed")
-					})
-
-					it("returns an error", func() {
-						_, err := build(packit.BuildContext{
-							WorkingDir: workingDir,
-							Layers:     packit.Layers{Path: layersDir},
-							CNBPath:    cnbDir,
-							Plan: packit.BuildpackPlan{
-								Entries: []packit.BuildpackPlanEntry{
-									{Name: "node_modules"},
-								},
-							},
-						})
-						Expect(err).To(MatchError("prune process failed"))
-					})
-				})
-			})
-
-			context("when the BOM cannot be generated", func() {
-				it.Before(func() {
-					sbomGenerator.GenerateCall.Returns.Error = errors.New("failed to generate SBOM")
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						BuildpackInfo: packit.BuildpackInfo{
-							SBOMFormats: []string{"application/vnd.cyclonedx+json", "application/spdx+json", "application/vnd.syft+json"},
-						},
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{{Name: "node_modules"}},
-						},
-						Stack: "some-stack",
-					})
-					Expect(err).To(MatchError("failed to generate SBOM"))
-				})
-			})
-
-			context("when the BOM cannot be formatted", func() {
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						WorkingDir: workingDir,
-						BuildpackInfo: packit.BuildpackInfo{
-							SBOMFormats: []string{"random-format"},
-						},
-					})
-					Expect(err).To(MatchError("unsupported SBOM format: 'random-format'"))
-				})
-			})
-
-			context("when the node_modules directory cannot be linked", func() {
-				it.Before(func() {
-					linker.LinkCall.Returns.Error = errors.New("failed to link node_modules")
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{
-								{Name: "node_modules"},
-							},
-						},
-					})
-					Expect(err).To(MatchError("failed to link node_modules"))
-				})
-			})
-
-			context("when the linked modules cannot be resolved", func() {
-				it.Before(func() {
-					symlinkResolver.ResolveCall.Returns.Error = errors.New("failed to resolve module symlinks")
-				})
-
-				it("returns an error", func() {
-					_, err := build(packit.BuildContext{
-						WorkingDir: workingDir,
-						Layers:     packit.Layers{Path: layersDir},
-						CNBPath:    cnbDir,
-						Plan: packit.BuildpackPlan{
-							Entries: []packit.BuildpackPlanEntry{
-								{Name: "node_modules"},
-							},
-						},
-					})
-					Expect(err).To(MatchError("failed to resolve module symlinks"))
 				})
 			})
 		})
