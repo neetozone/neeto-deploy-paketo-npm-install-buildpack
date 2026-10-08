@@ -84,7 +84,7 @@ func testInstallBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(process.Run(modulesDir, cacheDir, workingDir, "some-npmrc-path", false)).To(Succeed())
 				Expect(executable.ExecuteCall.Receives.Execution.Args).To(Equal([]string{"install", "--unsafe-perm", "--cache", cacheDir}))
 				Expect(executable.ExecuteCall.Receives.Execution.Dir).To(Equal(workingDir))
-				Expect(executable.ExecuteCall.Receives.Execution.Env).To(Equal(append(os.Environ(), "NPM_CONFIG_LOGLEVEL=some-val", "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NODE_ENV=development")))
+				Expect(addedEnv(executable.ExecuteCall.Receives.Execution.Env)).To(Equal([]string{"NPM_CONFIG_LOGLEVEL=some-val", "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NODE_ENV=development"}))
 				Expect(buffer.String()).To(ContainLines(
 					fmt.Sprintf("    Running 'npm install --unsafe-perm --cache %s'", cacheDir),
 					"      stdout output",
@@ -105,7 +105,7 @@ func testInstallBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(process.Run(modulesDir, cacheDir, workingDir, "some-npmrc-path", true)).To(Succeed())
 				Expect(executable.ExecuteCall.Receives.Execution.Args).To(Equal([]string{"install", "--unsafe-perm", "--cache", cacheDir}))
 				Expect(executable.ExecuteCall.Receives.Execution.Dir).To(Equal(workingDir))
-				Expect(executable.ExecuteCall.Receives.Execution.Env).To(Equal(append(os.Environ(), "NPM_CONFIG_LOGLEVEL=some-val", "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executable.ExecuteCall.Receives.Execution.Env)).To(Equal([]string{"NPM_CONFIG_LOGLEVEL=some-val", "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					fmt.Sprintf("    Running 'npm install --unsafe-perm --cache %s'", cacheDir),
 					"      stdout output",
