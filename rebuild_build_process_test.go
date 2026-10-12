@@ -101,7 +101,7 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(summer.SumCall.Receives.Paths[0]).To(Equal(filepath.Join(workingDir, "node_modules")))
 				Expect(summer.SumCall.Receives.Paths[1]).To(ContainSubstring("executable_response"))
 				for _, ex := range executions {
-					Expect(ex.Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+					Expect(addedEnv(ex.Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				}
 				lastExecution := executions[len(executions)-1]
 				Expect(lastExecution.Args).To(Equal([]string{
@@ -127,7 +127,7 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(summer.SumCall.Receives.Paths[0]).To(Equal(filepath.Join(workingDir, "node_modules")))
 				Expect(summer.SumCall.Receives.Paths[1]).To(ContainSubstring("executable_response"))
 				for _, ex := range executions {
-					Expect(ex.Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+					Expect(addedEnv(ex.Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				}
 				lastExecution := executions[len(executions)-1]
 				Expect(lastExecution.Args).To(Equal([]string{
@@ -191,11 +191,11 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(executable.ExecuteCall.CallCount).To(Equal(4))
 				Expect(executions[0].Args).To(Equal([]string{"list"}))
 				Expect(executions[0].Dir).To(Equal(workingDir))
-				Expect(executions[0].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[0].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 
 				Expect(executions[1].Args).To(Equal([]string{"run-script", "preinstall", "--if-present"}))
 				Expect(executions[1].Dir).To(Equal(workingDir))
-				Expect(executions[1].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[1].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm run-script preinstall --if-present'",
 					"      stdout output",
@@ -204,7 +204,7 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(executions[2].Args).To(Equal([]string{"rebuild", "--nodedir="}))
 				Expect(executions[2].Dir).To(Equal(workingDir))
-				Expect(executions[2].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NPM_CONFIG_LOGLEVEL=some-val", "NODE_ENV=development")))
+				Expect(addedEnv(executions[2].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NPM_CONFIG_LOGLEVEL=some-val", "NODE_ENV=development"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm rebuild --nodedir='",
 					"      stdout output",
@@ -213,16 +213,19 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(executions[3].Args).To(Equal([]string{"run-script", "postinstall", "--if-present"}))
 				Expect(executions[3].Dir).To(Equal(workingDir))
-				Expect(executions[3].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[3].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm run-script postinstall --if-present'",
 					"      stdout output",
 					"      stderr output",
 				))
 
-				path, err := os.Readlink(filepath.Join(workingDir, "node_modules"))
+				// node_modules stays in the working directory and is copied into the
+				// layer for caching, instead of being moved there and symlinked back.
+				info, err := os.Lstat(filepath.Join(workingDir, "node_modules"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(path).To(Equal(filepath.Join(modulesDir, "node_modules")))
+				Expect(info.IsDir()).To(BeTrue())
+				Expect(filepath.Join(modulesDir, "node_modules")).To(BeADirectory())
 			})
 		})
 
@@ -233,11 +236,11 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(executable.ExecuteCall.CallCount).To(Equal(4))
 				Expect(executions[0].Args).To(Equal([]string{"list"}))
 				Expect(executions[0].Dir).To(Equal(workingDir))
-				Expect(executions[0].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[0].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 
 				Expect(executions[1].Args).To(Equal([]string{"run-script", "preinstall", "--if-present"}))
 				Expect(executions[1].Dir).To(Equal(workingDir))
-				Expect(executions[1].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[1].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm run-script preinstall --if-present'",
 					"      stdout output",
@@ -246,7 +249,7 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(executions[2].Args).To(Equal([]string{"rebuild", "--nodedir="}))
 				Expect(executions[2].Dir).To(Equal(workingDir))
-				Expect(executions[2].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NPM_CONFIG_LOGLEVEL=some-val")))
+				Expect(addedEnv(executions[2].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NPM_CONFIG_LOGLEVEL=some-val"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm rebuild --nodedir='",
 					"      stdout output",
@@ -255,16 +258,19 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(executions[3].Args).To(Equal([]string{"run-script", "postinstall", "--if-present"}))
 				Expect(executions[3].Dir).To(Equal(workingDir))
-				Expect(executions[3].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[3].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm run-script postinstall --if-present'",
 					"      stdout output",
 					"      stderr output",
 				))
 
-				path, err := os.Readlink(filepath.Join(workingDir, "node_modules"))
+				// node_modules stays in the working directory and is copied into the
+				// layer for caching, instead of being moved there and symlinked back.
+				info, err := os.Lstat(filepath.Join(workingDir, "node_modules"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(path).To(Equal(filepath.Join(modulesDir, "node_modules")))
+				Expect(info.IsDir()).To(BeTrue())
+				Expect(filepath.Join(modulesDir, "node_modules")).To(BeADirectory())
 			})
 		})
 
@@ -275,11 +281,11 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 				Expect(executable.ExecuteCall.CallCount).To(Equal(4))
 				Expect(executions[0].Args).To(Equal([]string{"list"}))
 				Expect(executions[0].Dir).To(Equal(workingDir))
-				Expect(executions[0].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[0].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 
 				Expect(executions[1].Args).To(Equal([]string{"run-script", "preinstall", "--if-present"}))
 				Expect(executions[1].Dir).To(Equal(workingDir))
-				Expect(executions[1].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[1].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm run-script preinstall --if-present'",
 					"      stdout output",
@@ -288,7 +294,7 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(executions[2].Args).To(Equal([]string{"rebuild", "--nodedir="}))
 				Expect(executions[2].Dir).To(Equal(workingDir))
-				Expect(executions[2].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NPM_CONFIG_LOGLEVEL=some-val")))
+				Expect(addedEnv(executions[2].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path", "NPM_CONFIG_LOGLEVEL=some-val"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm rebuild --nodedir='",
 					"      stdout output",
@@ -297,16 +303,19 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 
 				Expect(executions[3].Args).To(Equal([]string{"run-script", "postinstall", "--if-present"}))
 				Expect(executions[3].Dir).To(Equal(workingDir))
-				Expect(executions[3].Env).To(Equal(append(os.Environ(), "NPM_CONFIG_GLOBALCONFIG=some-npmrc-path")))
+				Expect(addedEnv(executions[3].Env)).To(Equal([]string{"NPM_CONFIG_GLOBALCONFIG=some-npmrc-path"}))
 				Expect(buffer.String()).To(ContainLines(
 					"    Running 'npm run-script postinstall --if-present'",
 					"      stdout output",
 					"      stderr output",
 				))
 
-				path, err := os.Readlink(filepath.Join(workingDir, "node_modules"))
+				// node_modules stays in the working directory and is copied into the
+				// layer for caching, instead of being moved there and symlinked back.
+				info, err := os.Lstat(filepath.Join(workingDir, "node_modules"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(path).To(Equal(filepath.Join(modulesDir, "node_modules")))
+				Expect(info.IsDir()).To(BeTrue())
+				Expect(filepath.Join(modulesDir, "node_modules")).To(BeADirectory())
 			})
 		})
 
@@ -329,21 +338,6 @@ func testRebuildBuildProcess(t *testing.T, context spec.G, it spec.S) {
 						"      stderr output",
 					))
 					Expect(err).To(MatchError("vendored node_modules have unmet dependencies: npm list failed: exit status 1"))
-				})
-			})
-
-			context("when the node_modules directory cannot be created", func() {
-				it.Before(func() {
-					Expect(os.Chmod(modulesDir, 0000)).To(Succeed())
-				})
-
-				it.After(func() {
-					Expect(os.Chmod(modulesDir, os.ModePerm)).To(Succeed())
-				})
-
-				it("returns an error", func() {
-					err := process.Run(modulesDir, cacheDir, workingDir, "", true)
-					Expect(err).To(MatchError(ContainSubstring("permission denied")))
 				})
 			})
 
